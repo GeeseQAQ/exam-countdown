@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>考试倒计时</title>
+<style>
+  :root{
+    --bg:#0f1420; --card:#1a2232; --line:#2a3550;
+    --text:#e8edf6; --muted:#8fa0bd;
+    --green:#34d399; --yellow:#fbbf24; --red:#f87171; --gray:#64748b;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; min-height:100vh; padding:24px 16px 64px;}
+  .wrap{max-width:960px; margin:0 auto;}
+  header h1{font-size:26px; letter-spacing:1px;}
+  header p{color:var(--muted); margin-top:6px; font-size:14px;}
+  .toolbar{display:flex; flex-wrap:wrap; gap:10px; margin:22px 0; align-items:center;}
+  .toolbar input[type=text]{flex:1 1 160px;}
+  .toolbar input[type=date]{flex:0 1 170px;}
+  input{background:var(--card); border:1px solid var(--line); color:var(--text); padding:10px 12px; border-radius:10px; font-size:15px;}
+  input:focus{outline:none; border-color:#4b6cb7;}
+  button{cursor:pointer; border:1px solid var(--line); background:var(--card); color:var(--text); padding:10px 14px; border-radius:10px; font-size:14px;}
+  button.primary{background:#2b59ff; border-color:#2b59ff; font-weight:600;}
+  button.ghost{color:var(--muted);}
+  button:active{transform:translateY(1px);}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:12px;}
+  .card .top{display:flex; justify-content:space-between; align-items:flex-start;}
+  .card .name{font-size:17px; font-weight:600;}
+  .card .date{color:var(--muted); font-size:12px; margin-top:3px;}
+  .del{border:none; background:none; color:var(--muted); font-size:18px; padding:2px 8px;}
+  .del:hover{color:var(--red);}
+  .days{font-size:38px; font-weight:700; line-height:1;}
+  .days small{font-size:14px; font-weight:500; margin-left:4px; color:var(--muted);}
+  .badge{display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600;}
+  .urgent .days,.urgent .badge{color:var(--red);} .urgent .badge{background:rgba(248,113,113,.12);}
+  .soon .days,.soon .badge{color:var(--yellow);} .soon .badge{background:rgba(251,191,36,.12);}
+  .ample .days,.ample .badge{color:var(--green);} .ample .badge{background:rgba(52,211,153,.12);}
+  .over .days,.over .badge{color:var(--gray);} .over .badge{background:rgba(100,116,139,.15);}
+  .bar{height:6px; background:#0c111c; border-radius:999px; overflow:hidden;}
+  .bar i{display:block; height:100%; background:linear-gradient(90deg,#2b59ff,#34d399); border-radius:999px; transition:width .3s;}
+  .meta{display:flex; justify-content:space-between; font-size:12px; color:var(--muted);}
+  ul.tasks{list-style:none; display:flex; flex-direction:column; gap:6px;}
+  ul.tasks li{display:flex; align-items:center; gap:8px; font-size:14px;}
+  ul.tasks input[type=checkbox]{width:16px; height:16px; accent-color:#2b59ff; cursor:pointer; flex:none;}
+  ul.tasks li.done span{text-decoration:line-through; color:var(--muted);}
+  ul.tasks li span{flex:1; word-break:break-all;}
+  ul.tasks li button{border:none; background:none; color:var(--muted); padding:0 4px; font-size:15px;}
+  ul.tasks li button:hover{color:var(--red);}
+  .task-add{display:flex; gap:8px;}
+  .task-add input{flex:1; padding:8px 10px; font-size:14px;}
+  .empty{text-align:center; color:var(--muted); padding:48px 0; font-size:15px;}
+  .modal{position:fixed; inset:0; background:rgba(5,8,15,.75); display:none; align-items:center; justify-content:center; padding:20px; z-index:50;}
+  .modal.open{display:flex;}
+  .modal .box{background:var(--card); border-radius:16px; padding:16px; max-width:420px; width:100%; display:flex; flex-direction:column; gap:12px; align-items:center; max-height:92vh; overflow:auto;}
+  .modal img{width:100%; border-radius:10px;}
+  .hint{font-size:12px; color:var(--muted); text-align:center;}
+  footer{margin-top:28px; text-align:center; color:var(--muted); font-size:12px;}
+  @media (max-width:600px){ .days{font-size:32px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>考试倒计时</h1>
+    <p>多科目期末倒计时 · 数据保存在本机浏览器，无需登录</p>
+  </header>
+
+  <form class="toolbar" id="addForm">
+    <input type="text" id="nameInput" placeholder="科目名称，如：数据库原理" maxlength="20" required>
+    <input type="date" id="dateInput" required>
+    <button type="submit" class="primary">添加科目</button>
+    <button type="button" id="shareBtn">生成进度卡片</button>
+    <button type="button" class="ghost" id="sampleBtn">导入示例</button>
+    <button type="button" class="ghost" id="clearBtn">清空全部</button>
+  </form>
+
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="emptyTip" hidden>还没有科目，点上方「导入示例」快速体验。</p>
+  <footer>剩余天数按本地日历日计算 · 跨天自动刷新</footer>
+</div>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <img id="cardImg" alt="进度卡片预览">
+    <a id="downloadBtn" class="primary" download="考试倒计时卡片.png" style="text-decoration:none;padding:10px 14px;border-radius:10px;background:#2b59ff;color:#fff;font-size:14px;">下载卡片</a>
+    <p class="hint">手机上长按图片可保存到相册；电脑上点「下载卡片」。</p>
+    <button id="closeBtn">关闭</button>
+  </div>
+</div>
+
+<canvas id="offCanvas" hidden></canvas>
+
+<script>
+const LS_KEY = 'exam-countdown-v1';
+let subjects = load();
+
+function load(){ try { const v = JSON.parse(localStorage.getItem(LS_KEY)); return Array.isArray(v) ? v : []; } catch(e){ return []; } }
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(subjects)); }
+function uid(){ return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+// 按“本地日历日”计算，避免 UTC 解析导致的 ±1 天问题：把日期锚定在当天中午
+function parseLocal(str){ const [y,m,d] = str.split('-').map(Number); return new Date(y, m-1, d, 12, 0, 0); }
+function daysRemaining(str){
+  const t = parseLocal(str), now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  return Math.round((t - today) / 86400000);
+}
+function status(days){
+  if (days < 0)  return { cls:'over',   label:'已结束' };
+  if (days === 0) return { cls:'urgent', label:'今天考试' };
+  if (days <= 3)  return { cls:'urgent', label:`剩 ${days} 天 · 冲刺` };
+  if (days <= 7)  return { cls:'soon',   label:`剩 ${days} 天 · 临近` };
+  return { cls:'ample', label:`剩 ${days} 天 · 充裕` };
+}
+function fmtDate(str){ const d = parseLocal(str); return `${d.getMonth()+1}月${d.getDate()}日`; }
+
+function render(){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  document.getElementById('emptyTip').hidden = subjects.length > 0;
+  const sorted = [...subjects].sort((a,b) => {
+    const da = daysRemaining(a.date), db = daysRemaining(b.date);
+    return (da < 0 ? Infinity : da) - (db < 0 ? Infinity : db);
+  });
+  for (const s of sorted){
+    const days = daysRemaining(s.date), st = status(days);
+    const total = s.tasks.length, done = s.tasks.filter(t => t.done).length;
+    const pct = total ? Math.round(done / total * 100) : 0;
+    const card = document.createElement('div');
+    card.className = 'card ' + st.cls;
+    card.innerHTML = `
+      <div class="top">
+        <div><div class="name">${esc(s.name)}</div><div class="date">${fmtDate(s.date)} 考试</div></div>
+        <button class="del" data-act="del" title="删除科目">×</button>
+      </div>
+      <div><span class="days">${days < 0 ? '—' : days}<small>天</small></span><br><span class="badge">${st.label}</span></div>
+      <div>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+        <div class="meta"><span>复习进度</span><span>${total ? done + '/' + total + ' 已完成' : '暂无任务'}</span></div>
+      </div>
+      <ul class="tasks">
+        ${s.tasks.map(t => `<li class="${t.done?'done':''}"><input type="checkbox" data-act="toggle" data-t="${t.id}" ${t.done?'checked':''}><span>${esc(t.text)}</span><button data-act="delTask" data-t="${t.id}">×</button></li>`).join('')}
+      </ul>
+      <div class="task-add"><input placeholder="添加复习任务…" maxlength="40"><button data-act="addTask">+</button></div>`;
+    card.querySelectorAll('[data-act]').forEach(el => el.addEventListener('click', e => onCard(e, s)));
+    const inp = card.querySelector('.task-add input');
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter'){
+        e.preventDefault();
+        const v = inp.value.trim();
+        if (v){ s.tasks.push({ id:uid(), text:v, done:false }); save(); render(); }
+      }
+    });
+    grid.appendChild(card);
+  }
+}
+function onCard(e, s){
+  const act = e.target.dataset && e.target.dataset.act;
+  if (!act) return;
+  if (act === 'del'){ if (confirm(`删除「${s.name}」？`)){ subjects = subjects.filter(x => x.id !== s.id); save(); render(); } }
+  if (act === 'toggle'){ const t = s.tasks.find(x => x.id === e.target.dataset.t); if (t){ t.done = !t.done; save(); render(); } }
+  if (act === 'delTask'){ s.tasks = s.tasks.filter(x => x.id !== e.target.dataset.t); save(); render(); }
+  if (act === 'addTask'){
+    const inp = e.target.parentElement.querySelector('input');
+    const v = inp.value.trim();
+    if (v){ s.tasks.push({ id:uid(), text:v, done:false }); save(); render(); }
+  }
+}
+function esc(str){ return String(str).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+document.getElementById('addForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = document.getElementById('nameInput').value.trim();
+  const date = document.getElementById('dateInput').value;
+  if (!name || !date) return;
+  subjects.push({ id:uid(), name, date, tasks:[] });
+  save(); render();
+  e.target.reset();
+});
+document.getElementById('sampleBtn').addEventListener('click', () => {
+  const off = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  const samples = [['高等数学',3,[['第8章 多元函数微分',false],['重积分真题一套',false]]],
+                   ['数据库原理',6,[['复习事务与恢复',false],['SQL 查询练习',true]]],
+                   ['大学英语',12,[['作文模板背诵',false]]],
+                   ['机器学习导论',25,[['过拟合与正则化笔记',false]]]];
+  for (const [name,n,tasks] of samples){
+    subjects.push({ id:uid(), name, date:off(n), tasks:tasks.map(t => ({ id:uid(), text:t[0], done:t[1] })) });
+  }
+  save(); render();
+});
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (subjects.length && confirm('清空全部科目和任务？')){ subjects = []; save(); render(); }
+});
+
+// 跨天自动刷新（无需手动刷新页面）
+let lastDay = new Date().getDate();
+setInterval(() => { if (new Date().getDate() !== lastDay){ lastDay = new Date().getDate(); render(); } }, 30000);
+
+// 分享卡片：540x960 (9:16)，按 devicePixelRatio 放大画布保证清晰度
+document.getElementById('shareBtn').addEventListener('click', () => {
+  const ratio = window.devicePixelRatio || 1, W = 540, H = 960;
+  const c = document.getElementById('offCanvas');
+  c.width = W * ratio; c.height = H * ratio;
+  const x = c.getContext('2d');
+  x.scale(ratio, ratio);
+  x.fillStyle = '#0f1420'; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#e8edf6'; x.font = '700 40px system-ui,"Microsoft YaHei",sans-serif'; x.fillText('考试倒计时', 40, 84);
+  const now = new Date();
+  x.fillStyle = '#8fa0bd'; x.font = '400 18px system-ui';
+  x.fillText(`截至 ${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`, 40, 118);
+  const list = [...subjects].sort((a,b) => daysRemaining(a.date) - daysRemaining(b.date)).slice(0, 8);
+  if (!list.length){ x.fillStyle = '#8fa0bd'; x.font = '400 22px system-ui'; x.fillText('还没有添加科目', 40, 300); }
+  let y = 180;
+  for (const s of list){
+    const d = daysRemaining(s.date), st = status(d);
+    const total = s.tasks.length, done = s.tasks.filter(t => t.done).length;
+    x.fillStyle = '#e8edf6'; x.font = '600 24px system-ui'; x.fillText(s.name, 40, y);
+    const col = st.cls === 'urgent' ? '#f87171' : st.cls === 'soon' ? '#fbbf24' : st.cls === 'ample' ? '#34d399' : '#64748b';
+    x.fillStyle = col; x.font = '700 24px system-ui'; x.textAlign = 'right';
+    x.fillText(d < 0 ? '已结束' : `${d} 天`, W - 40, y);
+    x.textAlign = 'left';
+    x.fillStyle = '#1a2232'; x.fillRect(40, y + 16, W - 80, 10);
+    if (total) { x.fillStyle = '#34d399'; x.fillRect(40, y + 16, (W - 80) * done / total, 10); }
+    x.fillStyle = '#8fa0bd'; x.font = '400 15px system-ui';
+    x.fillText(`${fmtDate(s.date)} · 任务 ${done}/${total || 0}`, 40, y + 52);
+    y += 96;
+  }
+  x.fillStyle = '#64748b'; x.font = '400 14px system-ui'; x.fillText('长按保存 · 设为壁纸', 40, H - 40);
+  const url = c.toDataURL('image/png');
+  document.getElementById('cardImg').src = url;
+  document.getElementById('downloadBtn').href = url;
+  document.getElementById('modal').classList.add('open');
+});
+document.getElementById('closeBtn').addEventListener('click', () => document.getElementById('modal').classList.remove('open'));
+document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') e.target.classList.remove('open'); });
+
+render();
+</script>
+</body>
+</html>
